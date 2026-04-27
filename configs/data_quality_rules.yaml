@@ -1,0 +1,131 @@
+# Data Quality Rules Configuration
+# Defines validation rules applied between pipeline layers
+
+global:
+  halt_on_critical: true
+  log_warnings: true
+  rejected_path: "data/lakehouse/_rejected"
+
+rules:
+  bronze_to_silver:
+    orders:
+      - name: "order_id_not_null"
+        column: "order_id"
+        check: "not_null"
+        severity: "critical"
+      - name: "order_id_unique"
+        column: "order_id"
+        check: "unique"
+        severity: "critical"
+      - name: "order_status_valid"
+        column: "order_status"
+        check: "accepted_values"
+        values: ["delivered", "shipped", "canceled", "unavailable", "invoiced", "processing", "created", "approved"]
+        severity: "warning"
+      - name: "purchase_timestamp_not_null"
+        column: "order_purchase_timestamp"
+        check: "not_null"
+        severity: "critical"
+      - name: "purchase_timestamp_format"
+        column: "order_purchase_timestamp"
+        check: "timestamp_parseable"
+        format: "yyyy-MM-dd HH:mm:ss"
+        severity: "critical"
+
+    order_items:
+      - name: "order_id_not_null"
+        column: "order_id"
+        check: "not_null"
+        severity: "critical"
+      - name: "product_id_not_null"
+        column: "product_id"
+        check: "not_null"
+        severity: "critical"
+      - name: "price_positive"
+        column: "price"
+        check: "greater_than"
+        value: 0
+        severity: "warning"
+      - name: "freight_non_negative"
+        column: "freight_value"
+        check: "greater_than_or_equal"
+        value: 0
+        severity: "warning"
+
+    order_payments:
+      - name: "order_id_not_null"
+        column: "order_id"
+        check: "not_null"
+        severity: "critical"
+      - name: "payment_type_valid"
+        column: "payment_type"
+        check: "accepted_values"
+        values: ["credit_card", "boleto", "voucher", "debit_card", "not_defined"]
+        severity: "warning"
+      - name: "payment_value_non_negative"
+        column: "payment_value"
+        check: "greater_than_or_equal"
+        value: 0
+        severity: "warning"
+
+    customers:
+      - name: "customer_id_not_null"
+        column: "customer_id"
+        check: "not_null"
+        severity: "critical"
+      - name: "customer_id_unique"
+        column: "customer_id"
+        check: "unique"
+        severity: "critical"
+
+    sellers:
+      - name: "seller_id_not_null"
+        column: "seller_id"
+        check: "not_null"
+        severity: "critical"
+      - name: "seller_id_unique"
+        column: "seller_id"
+        check: "unique"
+        severity: "critical"
+
+    products:
+      - name: "product_id_not_null"
+        column: "product_id"
+        check: "not_null"
+        severity: "critical"
+      - name: "product_id_unique"
+        column: "product_id"
+        check: "unique"
+        severity: "critical"
+
+  silver_to_gold:
+    referential_integrity:
+      - name: "order_items_orders_fk"
+        child_table: "order_items"
+        child_column: "order_id"
+        parent_table: "orders"
+        parent_column: "order_id"
+        severity: "critical"
+      - name: "order_items_products_fk"
+        child_table: "order_items"
+        child_column: "product_id"
+        parent_table: "products"
+        parent_column: "product_id"
+        severity: "warning"
+      - name: "order_items_sellers_fk"
+        child_table: "order_items"
+        child_column: "seller_id"
+        parent_table: "sellers"
+        parent_column: "seller_id"
+        severity: "warning"
+
+  freshness:
+    orders:
+      max_delay_hours: 24
+      timestamp_column: "order_purchase_timestamp"
+      severity: "warning"
+
+thresholds:
+  max_null_rate: 0.05  # 5% null rate triggers warning
+  max_duplicate_rate: 0.001  # 0.1% duplicates triggers warning
+  min_row_count_ratio: 0.8  # New batch must be >= 80% of previous batch size

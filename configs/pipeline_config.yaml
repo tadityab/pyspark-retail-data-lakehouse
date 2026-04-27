@@ -1,0 +1,65 @@
+# Pipeline Configuration
+# Controls paths, table definitions, and processing behavior
+
+data_lake:
+  base_path: "data/lakehouse"
+  bronze_path: "data/lakehouse/bronze"
+  silver_path: "data/lakehouse/silver"
+  gold_path: "data/lakehouse/gold"
+  rejected_path: "data/lakehouse/_rejected"
+  checkpoint_path: "data/lakehouse/_checkpoints"
+
+sources:
+  olist:
+    base_path: "data/raw/olist"
+    tables:
+      orders:
+        file_pattern: "olist_orders_dataset.csv"
+        primary_key: "order_id"
+        watermark_column: "order_purchase_timestamp"
+      order_items:
+        file_pattern: "olist_order_items_dataset.csv"
+        primary_key: ["order_id", "order_item_id"]
+        watermark_column: "shipping_limit_date"
+      order_payments:
+        file_pattern: "olist_order_payments_dataset.csv"
+        primary_key: ["order_id", "payment_sequential"]
+      order_reviews:
+        file_pattern: "olist_order_reviews_dataset.csv"
+        primary_key: "review_id"
+        watermark_column: "review_creation_date"
+      customers:
+        file_pattern: "olist_customers_dataset.csv"
+        primary_key: "customer_id"
+        scd_type: 2
+      sellers:
+        file_pattern: "olist_sellers_dataset.csv"
+        primary_key: "seller_id"
+        scd_type: 2
+      products:
+        file_pattern: "olist_products_dataset.csv"
+        primary_key: "product_id"
+      geolocation:
+        file_pattern: "olist_geolocation_dataset.csv"
+        primary_key: "geolocation_zip_code_prefix"
+
+  uk_retail:
+    base_path: "data/raw/uk_retail"
+    tables:
+      transactions:
+        file_pattern: "online_retail_II.csv"
+        primary_key: ["Invoice", "StockCode"]
+        watermark_column: "InvoiceDate"
+
+processing:
+  batch_size: 100000
+  shuffle_partitions: 200
+  broadcast_threshold_mb: 50
+  partition_column: "order_purchase_date"
+  partition_granularity: "month"  # year, month, day
+  overwrite_mode: "dynamic"  # dynamic partition overwrite
+
+incremental:
+  enabled: true
+  watermark_table: "data/lakehouse/_checkpoints/watermarks.json"
+  lookback_hours: 6  # overlap window to catch late arrivals
