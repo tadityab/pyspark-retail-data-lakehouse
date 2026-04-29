@@ -8,6 +8,7 @@ Usage:
 import argparse
 import sys
 import os
+import subprocess
 from datetime import datetime, timezone
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -31,6 +32,68 @@ SILVER_TABLES = [
 ]
 
 
+def _validate_source_path(source_path: str) -> None:
+    """Validate source path before starting Spark work."""
+    required = [
+        "olist_orders_dataset.csv",
+        "olist_order_items_dataset.csv",
+        "olist_order_payments_dataset.csv",
+        "olist_order_reviews_dataset.csv",
+        "olist_customers_dataset.csv",
+        "olist_sellers_dataset.csv",
+        "olist_products_dataset.csv",
+        "olist_geolocation_dataset.csv",
+    ]
+
+    if not os.path.isdir(source_path):
+        raise RuntimeError(
+            f"Source path not found: {source_path}. "
+            "Expected folder containing Olist CSV files."
+        )
+
+    missing = [f for f in required if not os.path.isfile(os.path.join(source_path, f))]
+    if missing:
+        raise RuntimeError(
+            "Missing required Olist files in source path. "
+            f"Missing: {missing}"
+        )
+
+
+def _validate_windows_winutils() -> None:
+    """Fail fast with an actionable error when winutils is invalid on Windows."""
+    if os.name != "nt":
+        return
+
+    hadoop_home = os.environ.get("HADOOP_HOME", "")
+    winutils = os.path.join(hadoop_home, "bin", "winutils.exe") if hadoop_home else ""
+
+    if not hadoop_home or not os.path.isfile(winutils):
+        raise RuntimeError(
+            "Windows Spark prerequisite missing: set HADOOP_HOME and ensure "
+            "HADOOP_HOME\\bin\\winutils.exe exists."
+        )
+
+    try:
+        result = subprocess.run(
+            [winutils, "ls", "/"],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            timeout=10,
+        )
+    except Exception as exc:
+        raise RuntimeError(
+            f"winutils check failed: {exc}. Ensure a compatible Hadoop 3.x x64 winutils.exe."
+        ) from exc
+
+    if result.returncode != 0:
+        raise RuntimeError(
+            "winutils.exe is present but not runnable. "
+            f"Return code: {result.returncode}. "
+            "On this machine this usually means missing VC++ runtime DLLs or an incompatible binary."
+        )
+
+
 def main():
     parser = argparse.ArgumentParser(description="Full pipeline: Bronze → Silver → Gold")
     parser.add_argument("--source-path", default="data/raw/olist", help="Raw CSV source path")
@@ -47,6 +110,9 @@ def main():
     logger.info(f"Pipeline started at {start_time.isoformat()}")
 
     try:
+        _validate_source_path(args.source_path)
+        _validate_windows_winutils()
+
         spark = get_spark_session(env=args.env)
 
         # ── BRONZE ──────────────────────────────────────────────
